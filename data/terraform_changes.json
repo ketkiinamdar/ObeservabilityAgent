@@ -1,0 +1,15 @@
+{
+  "changes": [
+    {
+      "timestamp": "2026-10-26T10:03:00Z",
+      "environment": "production",
+      "service": "policy-api",
+      "pipeline": "terraform-prod",
+      "run_id": "example-run-123",
+      "resource_type": "azurerm_linux_web_app",
+      "resource_name": "policy-api",
+      "actions": ["update"],
+      "summary": "Application configuration changed"
+    }
+  ]
+}
