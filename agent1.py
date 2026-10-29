@@ -13,14 +13,13 @@ from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain_ollama import ChatOllama
 from azure_devops_client import get_recent_builds
-from dummy_data import get_dummy_azure_monitor_signals
-from dummy_application_insights import (
-    get_dummy_application_insights_signals,
+from azure_monitor_client import (
+    get_application_exceptions,
+    get_failed_application_requests,
+    get_failed_dependencies,
+    get_azure_activity,
 )
 
-from dummy_azure_devops import (
-    get_dummy_azure_devops_deployments,
-)
 
 load_dotenv()
 
@@ -95,27 +94,43 @@ def query_workspace(workspace_id: str, query: str, hours: int):
 # Tool 1: Azure Monitor / Log Analytics
 # ---------------------------------------------------------
 @tool
-def get_azure_monitor_signals(
-    service_name: str = "insurance-policy-api",
+def get_log_analytics_exceptions(lookback_hours: int = 1) -> str:
+    """Retrieve real application exceptions from Log Analytics.
+    Use this to investigate exceptions and probable application failures."""
+
+    data = get_application_exceptions(lookback_hours)
+    return json.dumps(data, default=str)
+
+
+@tool
+def get_log_analytics_failed_requests(lookback_hours: int = 1) -> str:
+    """Retrieve real failed application requests from Log Analytics.
+    Use this to investigate HTTP failures and application availability."""
+
+    data = get_failed_application_requests(lookback_hours)
+    return json.dumps(data, default=str)
+
+
+@tool
+def get_log_analytics_failed_dependencies(
     lookback_hours: int = 1,
 ) -> str:
-    """
-    Retrieve Azure Monitor-style application health signals.
+    """Retrieve real failed dependencies from Log Analytics.
+    Use this to investigate SQL, database and external service failures."""
 
-    Currently returns simulated test data. Use it to investigate
-    application failures, latency degradation, and deployment correlation.
+    data = get_failed_dependencies(lookback_hours)
+    return json.dumps(data, default=str)
 
-    Args:
-        service_name: Name of the application to investigate.
-        lookback_hours: Lookback period between 1 and 24 hours.
-    """
 
-    result = get_dummy_azure_monitor_signals(
-        service_name=service_name,
-        lookback_hours=lookback_hours,
-    )
+@tool
+def get_log_analytics_azure_activity(
+    lookback_hours: int = 24,
+) -> str:
+    """Retrieve recent Azure management operations.
+    Use this to investigate infrastructure and configuration changes."""
 
-    return json.dumps(result)
+    data = get_azure_activity(lookback_hours)
+    return json.dumps(data, default=str)
 
 # ---------------------------------------------------------
 # Tool 2: Application Insights
@@ -298,18 +313,34 @@ For every incident investigation, produce a report with exactly these 13 numbere
 
 Investigation procedure:
 
-1. Call get_azure_monitor_signals.
-2. Call get_application_insights_signals.
-3. Call get_azure_devops_deployments.
-4. Correlate timestamps, services, deployment versions, errors, exceptions, and dependency behavior.
-5. Use only information returned by the tools or explicitly supplied by the user.
-6. Distinguish observed facts, inferences, and unverified hypotheses.
-7. Do not invent detection timestamps, customer counts, transaction losses, configuration changes, or infrastructure changes.
-8. If information is unavailable, write "Unknown — evidence not available."
-9. Use explicit timestamps with timezone when available.
-10. Base confidence on evidence quality, consistency, coverage, and alternative explanations. Do not invent a numerical probability.
-11. Provide actionable recommendations and measurable validation criteria.
-12. Treat rollback as a proposal requiring human approval, not an action to execute.
+1. Use Azure DevOps tools to identify recent builds, releases,
+   commits and deployment changes.
+
+2. Use Log Analytics tools to retrieve application exceptions,
+   failed requests, failed dependencies and Azure management
+   operations.
+
+3. Correlate events using timestamps, service names, operation IDs,
+   deployment versions and other available evidence.
+
+4. Establish the incident timeline using actual event timestamps.
+   Distinguish the earliest observed symptom from the actual incident
+   start time and detection time.
+
+5. A recent deployment is a possible cause, not proof of causation.
+   Validate it against telemetry and other available evidence.
+
+6. Clearly distinguish observed facts, inferences and alternative
+   hypotheses.
+7. Use only information returned by the tools or explicitly supplied by the user.
+8. Distinguish observed facts, inferences, and unverified hypotheses.
+9. Do not invent detection timestamps, customer counts, transaction losses, configuration changes, or infrastructure changes.
+10. If information is unavailable, write "Unknown — evidence not available."
+11. Use explicit timestamps with timezone when available.
+12. Base confidence on evidence quality, consistency, coverage, and alternative explanations. Do not invent a numerical probability.
+13. Provide actionable recommendations and measurable validation criteria.
+14. Treat rollback as a proposal requiring human approval, not an action to execute.
+
 
 SIMULATED DATA SAFETY:
 
@@ -327,10 +358,11 @@ llm = ChatOllama(
 )
 
 tools = [
-    get_azure_monitor_signals,
-    get_application_insights_signals,
+    get_log_analytics_exceptions,
+    get_log_analytics_failed_requests,
+    get_log_analytics_failed_dependencies,
+    get_log_analytics_azure_activity,
     get_azure_devops_deployments,
-    get_terraform_changes,
 ]
 
 agent = create_agent(
