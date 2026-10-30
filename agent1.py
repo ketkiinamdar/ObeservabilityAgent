@@ -18,8 +18,10 @@ from azure_monitor_client import (
     get_failed_application_requests,
     get_failed_dependencies,
     get_azure_activity,
+    get_rca_test_logs,
+    get_real_application_insights_data,
 )
-from azure_monitor_client import get_rca_test_logs
+
 
 load_dotenv()
 
@@ -147,27 +149,25 @@ def read_rca_test_logs(lookback_hours: int = 24) -> str:
 # ---------------------------------------------------------
 
 @tool
-def get_application_insights_signals(
-    service_name: str = "insurance-policy-api",
-    lookback_hours: int = 1,
+def analyze_application_insights(
+    lookback_hours: int = 24,
+    app_role_name: str = ""
 ) -> str:
     """
-    Retrieve simulated Application Insights requests, exceptions,
-    and dependency performance signals.
+    Retrieves real Application Insights telemetry:
+    requests, exceptions, dependencies and traces.
 
-    Args:
-        service_name: Application or service to investigate.
-        lookback_hours: Lookback period between 1 and 24 hours.
+    Use this tool to investigate application failures,
+    latency, SQL errors and related telemetry.
+    Correlate records using OperationId.
     """
 
-    result = get_dummy_application_insights_signals(
-        service_name=service_name,
+    result = get_real_application_insights_data(
         lookback_hours=lookback_hours,
+        app_role_name=app_role_name or None
     )
 
-    return json.dumps(result)
-
-
+    return str(result)
 
 
 # ---------------------------------------------------------
@@ -359,6 +359,39 @@ When investigating an incident:
 5. Clearly identify synthetic test data as test evidence.
 6. Never treat synthetic test events as actual production incidents.
 
+APPLICATION INSIGHTS INVESTIGATION:
+
+1. Retrieve real telemetry from Application Insights.
+
+2. Analyze the following telemetry:
+   - AppRequests: Identify failed requests and response latency.
+   - AppExceptions: Identify application exceptions.
+   - AppDependencies: Identify SQL, HTTP and external dependency failures.
+   - AppTraces: Identify relevant application log messages.
+
+3. Correlate related telemetry using OperationId.
+   Use timestamps and parent-child relationships where available.
+
+4. Identify:
+   - Failed request count
+   - Failure percentage
+   - Slowest requests
+   - Failed dependencies
+   - Exception types and messages
+   - Application version associated with failures
+
+5. Compare telemetry timestamps with Azure DevOps
+   deployment and release information.
+
+6. Do not assume that a deployment caused an incident
+   merely because it occurred shortly before the incident.
+
+7. Distinguish actual telemetry evidence from hypotheses.
+
+8. Do not assume customer impact from technical errors alone.
+   Use available request and user/session evidence, and
+   explicitly identify what cannot be established.
+
 OUTPUT:
 
 Produce a readable Markdown incident report with all 13 sections. Do not omit a section because information is missing. State missing evidence explicitly.
@@ -377,6 +410,7 @@ tools = [
     get_log_analytics_azure_activity,
     get_azure_devops_deployments,
     read_rca_test_logs,
+    analyze_application_insights,
 ]
 
 agent = create_agent(

@@ -204,3 +204,75 @@ def get_rca_test_logs(lookback_hours: int = 24):
     """
 
     return _query_to_dict(query, lookback_hours)
+
+def get_real_application_insights_data(
+    lookback_hours: int = 24,
+    app_role_name: str = None
+):
+    app_filter = ""
+
+    if app_role_name:
+        safe_name = app_role_name.replace("'", "''")
+        app_filter = f"| where AppRoleName == '{safe_name}'"
+
+    queries = {
+        "requests": f"""
+            AppRequests
+            | where TimeGenerated > ago({lookback_hours}h)
+            {app_filter}
+            | project TimeGenerated, Name, AppRoleName,
+                      AppVersion, Success, ResultCode,
+                      DurationMs, OperationId, Id, Properties
+            | order by TimeGenerated desc
+            | take 200
+        """,
+
+        "exceptions": f"""
+            AppExceptions
+            | where TimeGenerated > ago({lookback_hours}h)
+            {app_filter}
+            | project TimeGenerated, AppRoleName, AppVersion,
+                      ExceptionType, ProblemId, OuterMessage,
+                      OperationId, Properties
+            | order by TimeGenerated desc
+            | take 200
+        """,
+
+        "dependencies": f"""
+            AppDependencies
+            | where TimeGenerated > ago({lookback_hours}h)
+            {app_filter}
+            | project TimeGenerated, AppRoleName, AppVersion,
+                      Name, DependencyType, Target,
+                      Success, ResultCode, DurationMs,
+                      OperationId, Properties
+            | order by TimeGenerated desc
+            | take 200
+        """,
+
+        "traces": f"""
+            AppTraces
+            | where TimeGenerated > ago({lookback_hours}h)
+            {app_filter}
+            | project TimeGenerated, AppRoleName, AppVersion,
+                      Message, SeverityLevel,
+                      OperationId, Properties
+            | order by TimeGenerated desc
+            | take 200
+        """
+    }
+
+    results = {}
+
+    for data_type, query in queries.items():
+        try:
+            results[data_type] = _query_to_dict(
+                query, lookback_hours
+            )
+        except Exception as e:
+            results[data_type] = {
+                "error": str(e),
+                "source": "APPLICATION_INSIGHTS"
+            }
+
+    return results
