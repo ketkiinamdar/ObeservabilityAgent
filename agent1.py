@@ -19,7 +19,7 @@ from azure_monitor_client import (
     get_failed_dependencies,
     get_azure_activity,
 )
-
+from azure_monitor_client import get_rca_test_logs
 
 load_dotenv()
 
@@ -131,6 +131,16 @@ def get_log_analytics_azure_activity(
 
     data = get_azure_activity(lookback_hours)
     return json.dumps(data, default=str)
+
+@tool
+def read_rca_test_logs(lookback_hours: int = 24) -> str:
+    """
+    Reads synthetic RCA test events from the RCA_Test_CL_CL
+    Log Analytics table. Use this tool to investigate test incidents,
+    correlate events using CorrelationId, and identify possible causes.
+    """
+    result = get_rca_test_logs(lookback_hours)
+    return str(result)
 
 # ---------------------------------------------------------
 # Tool 2: Application Insights
@@ -341,10 +351,13 @@ Investigation procedure:
 13. Provide actionable recommendations and measurable validation criteria.
 14. Treat rollback as a proposal requiring human approval, not an action to execute.
 
-
-SIMULATED DATA SAFETY:
-
-The current data sources return simulated test data. Clearly label the report as a simulation. Never describe simulated observations as actual production events.
+When investigating an incident:
+1. Query the RCA test table when synthetic test data is relevant.
+2. Use CorrelationId to correlate related events.
+3. Compare event timestamps to identify the sequence of events.
+4. Consider deployment, application errors and dependency failures together.
+5. Clearly identify synthetic test data as test evidence.
+6. Never treat synthetic test events as actual production incidents.
 
 OUTPUT:
 
@@ -363,6 +376,7 @@ tools = [
     get_log_analytics_failed_dependencies,
     get_log_analytics_azure_activity,
     get_azure_devops_deployments,
+    read_rca_test_logs,
 ]
 
 agent = create_agent(

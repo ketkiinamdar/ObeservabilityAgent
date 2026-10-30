@@ -47,7 +47,8 @@ def _query_to_dict(query: str, lookback_hours: int) -> dict:
         for table in tables:
             # SDK column metadata contains column names.
             column_names = [
-                column.name for column in table.columns
+                column if isinstance(column, str) else column.name
+                for column in table.columns
             ]
 
             for values in table.rows:
@@ -185,16 +186,21 @@ def get_real_azure_monitor_data(
         "data_type": "REAL",
         "workspace_id": WORKSPACE_ID,
         "lookback_hours": lookback_hours,
-        "application_exceptions": get_application_exceptions(
-            lookback_hours
-        ),
-        "failed_requests": get_failed_application_requests(
-            lookback_hours
-        ),
-        "failed_dependencies": get_failed_dependencies(
-            lookback_hours
-        ),
-        "azure_activity": get_azure_activity(
-            max(lookback_hours, 24)
-        ),
+        "application_exceptions": get_application_exceptions(lookback_hours),
+        "failed_requests": get_failed_application_requests(lookback_hours),
+        "failed_dependencies": get_failed_dependencies(lookback_hours),
+        "azure_activity": get_azure_activity(max(lookback_hours, 24)),
     }
+
+def get_rca_test_logs(lookback_hours: int = 24):
+    query = f"""
+    RCA_Test_CL_CL
+    | where TimeGenerated > ago({lookback_hours}h)
+    | where Scenario == "RCA_TEST"
+    | project TimeGenerated, ServiceName, Environment,
+              Severity, Message, CorrelationId, Scenario
+    | order by TimeGenerated desc
+    | take 100
+    """
+
+    return _query_to_dict(query, lookback_hours)

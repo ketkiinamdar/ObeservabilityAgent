@@ -1,0 +1,29 @@
+[
+  {
+    "TimeGenerated": "2026-10-30T10:00:00Z",
+    "ServiceName": "insurance-policy-api",
+    "Environment": "TEST",
+    "Severity": "Information",
+    "Message": "Synthetic test deployment completed: version 2.8.0",
+    "CorrelationId": "RCA-TEST-2026-001",
+    "Scenario": "RCA_TEST"
+  },
+  {
+    "TimeGenerated": "2026-10-30T10:10:00Z",
+    "ServiceName": "insurance-policy-api",
+    "Environment": "TEST",
+    "Severity": "Warning",
+    "Message": "Synthetic SQL dependency latency increased to 4500 ms",
+    "CorrelationId": "RCA-TEST-2026-001",
+    "Scenario": "RCA_TEST"
+  },
+  {
+    "TimeGenerated": "2026-10-30T10:15:00Z",
+    "ServiceName": "insurance-policy-api",
+    "Environment": "TEST",
+    "Severity": "Error",
+    "Message": "Synthetic request failure: SQL dependency timeout",
+    "CorrelationId": "RCA-TEST-2026-001",
+    "Scenario": "RCA_TEST"
+  }
+]
