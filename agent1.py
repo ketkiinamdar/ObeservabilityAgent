@@ -5,6 +5,7 @@ from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
+load_dotenv()
 
 from azure.identity import DefaultAzureCredential
 from azure.monitor.query import LogsQueryClient
@@ -23,7 +24,7 @@ from azure_monitor_client import (
 )
 
 
-load_dotenv()
+
 
 # ---------------------------------------------------------
 # Configuration
@@ -438,12 +439,28 @@ def run_investigation(
     the findings, and generate the requested RCA report.
     """
 
-    result = agent.invoke({
+    result = agent.invoke(
+    {
         "messages": [
             {"role": "user", "content": request}
         ]
-    })
-
+    },
+    config={
+        "run_name": f"RCA Investigation - {service_name}",
+        "tags": [
+            "Insurance-RCA",
+            "Azure-Monitor",
+            "Application-Insights",
+            "Azure-DevOps"
+        ],
+        "metadata": {
+            "service_name": service_name,
+            "environment": environment,
+            "lookback_hours": lookback_hours,
+            "investigation_type": "incident-analysis"
+        }
+    }
+)
     # The last message is normally the agent's final response.
     final_message = result["messages"][-1]
     report = final_message.content
