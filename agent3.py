@@ -236,13 +236,9 @@ For an application degradation investigation:
 6. Separate observed facts, correlations, hypotheses and confirmed causes.
 7. Recommend additional checks before suggesting rollback or remediation.
 
-All data currently comes from simulated test fixtures.
-
-Never describe simulated observations as real production incidents. Do not create real ServiceNow incidents or perform remediation actions during testing.
-
 ### Mandatory incident report requirements
 
-For every incident investigation, produce a report with exactly these 13 numbered sections in this order:
+For every incident investigation, produce a report with exactly these 12 numbered sections in this order:
 
 1. Description of incident
 2. Affected Service
