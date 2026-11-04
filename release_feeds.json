@@ -1,0 +1,13 @@
+{
+"Terraform":["https://github.com/hashicorp/terraform/releases.atom"],
+"AzureRM Provider":["https://github.com/hashicorp/terraform-provider-azurerm/releases.atom"],
+"AzAPI Provider":["https://github.com/Azure/terraform-provider-azapi/releases.atom"],
+"npm":["https://github.com/npm/cli/releases.atom"],
+"Angular":["https://github.com/angular/angular/releases.atom"],
+"PowerShell":["https://github.com/PowerShell/PowerShell/releases.atom"],
+".NET":["https://github.com/dotnet/core/releases.atom"],
+"pytest":["https://github.com/pytest-dev/pytest/releases.atom"],
+"NUnit":["https://github.com/nunit/nunit/releases.atom"],
+"Azure Pipelines Tasks":["https://github.com/microsoft/azure-pipelines-tasks/releases.atom"],
+"Python":["https://www.python.org/blogs/"]
+}
