@@ -30,4 +30,7 @@ Your `azure_devops_client.py` expects `AZDO_ORG`, `AZDO_PROJECT`, and `AZDO_PAT`
 ## Architecture
 <img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/3b88084a-ea98-4b67-a1c1-c5f21be9cd95" />
 
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/dd0fadca-3716-480d-a94d-7c4c054b9187" />
+
+
 
