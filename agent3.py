@@ -2,21 +2,17 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-
 import requests
 from dotenv import load_dotenv
-
 from azure.identity import DefaultAzureCredential
 from azure.monitor.query import LogsQueryClient
-
 from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain_ollama import ChatOllama
 from azure_devops_client import get_recent_builds
-from dummy_data import get_dummy_azure_monitor_signals
-from dummy_application_insights import (
-    get_dummy_application_insights_signals,
-)
+from clients.servicenow_client import search_incidents
+from clients.sonarcloud_client import quality_gate, measures, issues
+from agents.technology_intelligence import collect as collect_technology_releases
 from azure_monitor_client import (
     get_application_exceptions,
     get_failed_application_requests,
@@ -194,108 +190,116 @@ def get_azure_devops_deployments(lookback_hours: int = 96) -> str:
             "data_available": False,
         })
 
+# ---------------------------------------------------------
+# Tool 4: Historical ServiceNow incidents (read-only)
+# ---------------------------------------------------------
+@tool
+def get_historical_servicenow_incidents(search_text: str = "", lookback_days: int = 90) -> str:
+    """Search historical ServiceNow incidents for similar symptoms and prior resolutions.
+    Read-only. Treat matches as historical precedent, not proof of current root cause.
+    Avoid customer names, policy numbers or other personal data in search_text."""
+    try:
+        data = search_incidents(text=search_text, days=lookback_days, limit=100)
+        # Minimize exposure of potentially sensitive free-text fields before sending to the LLM.
+        safe_rows = []
+        for row in data:
+            safe_rows.append({k: row.get(k) for k in (
+                "number", "short_description", "priority", "state", "assignment_group",
+                "opened_at", "closed_at", "close_code", "cmdb_ci"
+            ) if k in row})
+        return json.dumps({"source": "SERVICENOW_HISTORICAL_INCIDENTS", "count": len(safe_rows), "incidents": safe_rows}, default=str)
+    except Exception as exc:
+        return json.dumps({"source": "SERVICENOW_HISTORICAL_INCIDENTS", "data_available": False, "error": str(exc)})
 
+# ---------------------------------------------------------
+# Tool 5: SonarCloud quality and security posture (read-only)
+# ---------------------------------------------------------
+@tool
+def analyze_sonarcloud_project(project_key: str) -> str:
+    """Retrieve SonarCloud quality gate, code metrics and recent issues for a project.
+    Use this as supporting engineering-quality evidence; do not infer runtime causation from static analysis alone."""
+    try:
+        return json.dumps({
+            "source": "SONARCLOUD",
+            "project_key": project_key,
+            "quality_gate": quality_gate(project_key),
+            "measures": measures(project_key),
+            "issues": issues(project_key),
+        }, default=str)
+    except Exception as exc:
+        return json.dumps({"source": "SONARCLOUD", "project_key": project_key, "data_available": False, "error": str(exc)})
+
+# ---------------------------------------------------------
+# Tool 6: Technology release intelligence (RSS/Atom)
+# ---------------------------------------------------------
+@tool
+def get_recent_technology_releases(lookback_days: int = 7) -> str:
+    """Collect recent entries from configured technology release RSS/Atom feeds.
+    Use for awareness of Terraform, Azure providers, .NET, Python and pipeline task updates.
+    A release entry is not proof that the affected technology is used by this service."""
+    try:
+        result = collect_technology_releases(days=max(1, min(int(lookback_days), 90)))
+        return json.dumps({"source": "CONFIGURED_RELEASE_FEEDS", **result}, default=str)
+    except Exception as exc:
+        return json.dumps({"source": "CONFIGURED_RELEASE_FEEDS", "data_available": False, "error": str(exc)})
 
 # ---------------------------------------------------------
 # Agent instructions and creation
 # ---------------------------------------------------------
 
 SYSTEM_PROMPT = """
-### Observability investigation instructions
+You are an evidence-led observability and engineering intelligence agent for an insurance technology environment.
 
-You have seven monitoring tools:
+Available evidence tools:
+- Log Analytics: application exceptions, failed requests, failed dependencies, Azure activity and synthetic RCA test logs.
+- Application Insights: requests, exceptions, dependencies and traces; correlate by OperationId.
+- Azure DevOps: recent pipeline/build history (not guaranteed environment deployment records).
+- ServiceNow: historical incident metadata for similar symptoms and prior incident patterns.
+- SonarCloud: project quality gate, code metrics and issue summaries.
+- Technology release feeds: recent RSS/Atom release announcements for configured technologies.
 
-1. get_log_analytics_exceptions - 
-   - Retrieve real application exceptions from Log Analytics. Use this to investigate exceptions and probable application failures
+DATA SOURCE CLASSIFICATION
+- Azure Monitor and Application Insights tools are configured to retrieve real telemetry, subject to their implementation and credentials.
+- RCA_Test_CL_CL contains synthetic test data. Label it explicitly as synthetic and never describe it as a production incident.
+- Azure DevOps build records are build evidence only. Do not call a build a production deployment unless an environment deployment record explicitly confirms it.
+- ServiceNow results are historical precedents, not proof of current causation.
+- SonarCloud and release-feed findings are supporting engineering context, not proof of runtime failure.
+- If a tool reports an error, empty result, or unavailable source, state that limitation. Never silently replace missing data with dummy data.
 
-2. get_log_analytics_failed_requests 
-   - Retrieve real failed application requests from Log Analytics. Use this to investigate HTTP failures and application availability.
+INVESTIGATION PROCEDURE
+1. For an incident investigation, query relevant Log Analytics and Application Insights tools, Azure activity, and Azure DevOps build history. Query the RCA test table only when synthetic test evidence is relevant or requested.
+2. Query ServiceNow history when symptoms can be compared with prior incidents. Do not include raw customer identifiers or unnecessary free-text incident details in the report.
+3. Query SonarCloud only when a project key is provided or configured by the user. Treat findings as context, not runtime causation.
+4. Query release feeds when a technology change could be relevant. Do not claim a release affects the service without confirming its installed version and applicability.
+5. Establish a timeline using actual timestamps and timezone. Distinguish earliest observed symptom, incident start estimate and detection time.
+6. Correlate by OperationId, CorrelationId, service, environment, timestamps, commit and version where available.
+7. A nearby build or release is a hypothesis, not proof. Validate against telemetry and confirmed deployment evidence.
+8. Clearly separate observed facts, correlations, inferences, hypotheses and unknowns.
+9. Never invent customer impact, customer counts, transaction losses, detection timestamps, deployment events, configuration changes or infrastructure changes.
+10. If information is unavailable, write: "Unknown — evidence not available."
+11. Do not execute remediation, rollback, configuration changes or ServiceNow write operations. Recommendations requiring changes must be presented for human approval.
+12. Base confidence on evidence quality, consistency, source coverage and alternative explanations. Do not invent a numerical probability.
 
-3. get_log_analytics_failed_dependencies 
-   - Retrieve real failed dependencies from Log Analytics.Use this to investigate SQL, database and external service failures
-
-4. get_log_analytics_azure_activity 
-   - Retrieve recent Azure management operations. Use this to investigate infrastructure and configuration changes
-
-5. read_rca_test_logs 
-   - Reads synthetic RCA test events from the RCA_Test_CL. Log Analytics table. Use this tool to investigate test incidents, correlate events using CorrelationId, and identify possible causes.
-
-6. get_azure_devops_deployments 
-   - Retrieve real Azure DevOps build and pipeline history. Use this to investigate recent deployments, failed builds, build timestamps, branches and source versions.
-
-7. analyze_application_insights
-   - Retrieves real Application Insights telemetry: requests, exceptions, dependencies and traces. Use this tool to investigate application failures, latency, SQL errors and related telemetry. Correlate records using OperationId.
-
-For an application degradation investigation:
-
-1. Retrieve monitoring signals from all three tools.
-2. Identify when the degradation began.
-3. Compare the monitoring timeline with deployment timestamps.
-4. Examine Application Insights exceptions and dependency failures.
-5. Determine whether the deployment, database dependency, or another factor could explain the symptoms.
-6. Separate observed facts, correlations, hypotheses and confirmed causes.
-7. Recommend additional checks before suggesting rollback or remediation.
-
-### Mandatory incident report requirements
-
-For every incident investigation, produce a report with exactly these 12 numbered sections in this order:
-
+MANDATORY RCA REPORT
+For every incident investigation, produce readable Markdown with exactly these 13 numbered sections, in this order:
 1. Description of incident
-2. Affected Service
-3. Start Time
-4. Detection Time
-5. Symptoms
-6. Recent changes
-7. Probable root-cause
-8. Alternative Hypotheses
-9. Confidence
-10. Recommended Actions
-11. Validation Criteria
-12. Rollback Option
+2. Affected Service (application, environment and dependencies)
+3. Customer Impact
+4. Start Time
+5. Detection Time
+6. Symptoms
+7. Recent changes
+8. Probable root-cause
+9. Alternative Hypotheses
+10. Confidence
+11. Recommended Actions
+12. Validation Criteria
+13. Rollback Option
 
-Investigation procedure:
+Do not omit a section when evidence is missing. State "Unknown — evidence not available." Include explicit timezone-aware timestamps when available. Label synthetic evidence. Treat rollback as a proposal requiring human approval, not an action to execute.
 
-1. Use Azure DevOps tools to identify recent builds, releases,
-   commits and deployment changes.
-
-2. Use Log Analytics tools to retrieve application exceptions,
-   failed requests, failed dependencies and Azure management
-   operations.
-
-3. Correlate events using timestamps, service names, operation IDs,
-   deployment versions and other available evidence.
-
-4. Establish the incident timeline using actual event timestamps.
-   Distinguish the earliest observed symptom from the actual incident
-   start time and detection time.
-
-5. A recent deployment is a possible cause, not proof of causation.
-   Validate it against telemetry and other available evidence.
-
-6. Clearly distinguish observed facts, inferences and alternative
-   hypotheses.
-7. Use only information returned by the tools or explicitly supplied by the user.
-8. Distinguish observed facts, inferences, and unverified hypotheses.
-9. Do not invent detection timestamps, customer counts, transaction losses, configuration changes, or infrastructure changes.
-10. If information is unavailable, write "Unknown — evidence not available."
-11. Use explicit timestamps with timezone when available.
-12. Base confidence on evidence quality, consistency, coverage, and alternative explanations. Do not invent a numerical probability.
-13. Provide actionable recommendations and measurable validation criteria.
-14. Treat rollback as a proposal requiring human approval, not an action to execute.
-
-When investigating an incident:
-1. Query the RCA test table when synthetic test data is relevant.
-2. Use CorrelationId to correlate related events.
-3. Compare event timestamps to identify the sequence of events.
-4. Consider deployment, application errors and dependency failures together.
-5. Clearly identify synthetic test data as test evidence.
-6. Never treat synthetic test events as actual production incidents.
-
-OUTPUT:
-
-Produce a readable Markdown incident report with all 13 sections. Do not omit a section because information is missing. State missing evidence explicitly.
+For general engineering-intelligence requests (not incident RCA), return a concise report grouped by source, include collection timestamps and errors, and distinguish release announcements from confirmed estate impact.
 """
-
 llm = ChatOllama(
     model=OLLAMA_MODEL,
     base_url=OLLAMA_BASE_URL,
@@ -310,6 +314,9 @@ tools = [
     get_azure_devops_deployments,
     read_rca_test_logs,
     analyze_application_insights,
+    get_historical_servicenow_incidents,
+    analyze_sonarcloud_project,
+    get_recent_technology_releases,
 ]
 
 agent = create_agent(
@@ -333,8 +340,7 @@ def run_investigation(
     Environment: {environment}
     Lookback window: {lookback_hours} hours
 
-    Collect evidence from all four configured sources, correlate
-    the findings, and generate the requested RCA report.
+    Collect evidence from the relevant configured monitoring, deployment/build, historical incident, code-quality and release-intelligence sources. Clearly report unavailable sources, correlate the findings, and generate the requested 13-section RCA report.
     """
 
     result = agent.invoke(
