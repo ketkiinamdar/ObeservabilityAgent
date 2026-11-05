@@ -5,10 +5,6 @@
 AI-powered engineering operations for smarter incident resolution,
 proactive technology insights, and cost optimization.
 
-# Insurance AI Engineering Intelligence + RCA
-
-This package keeps the existing Azure Monitor / Application Insights / Azure DevOps RCA investigation and adds separate read-only engineering-intelligence collectors.
-
 ## Project files
 - `agent.py` — incident RCA agent, with ServiceNow history, SonarCloud and release-feed tools added.
 - `azure_devops_client.py` — supplied Azure DevOps build-history client.
@@ -18,16 +14,6 @@ This package keeps the existing Azure Monitor / Application Insights / Azure Dev
 - `agents/daily_intelligence.py` — daily engineering intelligence JSON report.
 - `scheduler.py` — optional periodic collector + Teams summary.
 - `notifications/teams_notifier.py` — Teams Incoming Webhook notification.
-
-## Setup
-1. Copy your existing `dummy_data.py`, `dummy_application_insights.py`, and `azure_monitor_client.py` into this project folder (these were referenced by your submitted `agent.py` but were not included in the uploads).
-2. Create/activate a virtual environment and install `pip install -r requirements.txt`.
-3. Copy `.env.example` to `.env` and fill in only the integrations you intend to use.
-4. Set Azure authentication for `DefaultAzureCredential` (for example `az login` locally or Managed Identity when hosted).
-5. Ensure `AZDO_PAT` is set. The submitted Azure DevOps client reads `AZDO_PAT`; `AZDO_TOKEN` in the submitted agent is unused.
-6. Run an interactive RCA: `python agent.py`.
-7. Run a one-off intelligence collection: `python -m agents.daily_intelligence`.
-8. Run scheduled intelligence: `python scheduler.py`.
 
 ## Safety and evidence boundaries
 - ServiceNow search and SonarCloud access are read-only. Use least-privilege credentials.
