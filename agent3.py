@@ -260,7 +260,6 @@ Available evidence tools:
 
 DATA SOURCE CLASSIFICATION
 - Azure Monitor and Application Insights tools are configured to retrieve real telemetry, subject to their implementation and credentials.
-- RCA_Test_CL_CL contains synthetic test data. Label it explicitly as synthetic and never describe it as a production incident.
 - Azure DevOps build records are build evidence only. Do not call a build a production deployment unless an environment deployment record explicitly confirms it.
 - ServiceNow results are historical precedents, not proof of current causation.
 - SonarCloud and release-feed findings are supporting engineering context, not proof of runtime failure.
@@ -312,7 +311,6 @@ tools = [
     get_log_analytics_failed_dependencies,
     get_log_analytics_azure_activity,
     get_azure_devops_deployments,
-    read_rca_test_logs,
     analyze_application_insights,
     get_historical_servicenow_incidents,
     analyze_sonarcloud_project,
